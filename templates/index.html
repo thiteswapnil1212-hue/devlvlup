@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DevLevelUp</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">D</span>
+          <div>
+            <p class="eyebrow">Developer Portfolio Audit</p>
+            <h1>DevLevelUp</h1>
+          </div>
+        </div>
+        <div class="nav-note">Analyze GitHub profiles with confidence</div>
+      </header>
+
+      <main class="main-container">
+        <section class="hero-card">
+          <div>
+            <p class="eyebrow accent">Analyze your career signal</p>
+            <h2>Turn GitHub history into actionable developer growth.</h2>
+            <p class="hero-copy">
+              Enter a GitHub username to uncover strengths, weaknesses, and next-step recommendations for your coding career.
+            </p>
+          </div>
+        </section>
+
+        <section class="card input-panel">
+          <form id="auditForm" class="form-grid">
+            <label class="form-field">
+              <span>GitHub username</span>
+              <input name="github_username" required placeholder="octocat" />
+            </label>
+            <label class="form-field">
+              <span>Live URL (optional)</span>
+              <input name="live_url" placeholder="https://example.com" />
+            </label>
+            <label class="form-field">
+              <span>Claimed level</span>
+              <select name="claimed_level">
+                <option value="junior">junior</option>
+                <option value="mid" selected>mid</option>
+                <option value="senior">senior</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Target role</span>
+              <select name="target_role">
+                <option value="full-stack" selected>Full-Stack Engineer</option>
+                <option value="frontend-engineer">Frontend Engineer</option>
+                <option value="backend-engineer">Backend Engineer</option>
+                <option value="software-engineer">Software Engineer</option>
+                <option value="ai-ml-engineer">AI/ML Engineer</option>
+                <option value="devops-engineer">DevOps Engineer</option>
+                <option value="data-scientist">Data Scientist</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Location</span>
+              <input name="location" value="remote" />
+            </label>
+            <button type="submit" class="primary-button">Analyze Profile</button>
+          </form>
+        </section>
+
+        <section id="result" class="result"></section>
+      </main>
+    </div>
+
+    <script>
+      const form = document.getElementById('auditForm');
+      const result = document.getElementById('result');
+      const API_BASE =
+        window.location.origin.includes('127.0.0.1:8000') ||
+        window.location.origin.includes('localhost:8000')
+          ? ''
+          : 'http://127.0.0.1:8000';
+
+      function list(items) {
+        return `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
+      }
+
+      function scoreCard(title, value, subtext) {
+        return `
+          <article class="card stat-card">
+            <p class="label">${title}</p>
+            <p class="value">${value}</p>
+            <p class="muted">${subtext}</p>
+          </article>
+        `;
+      }
+
+      function prettyScore(value) {
+        return Number(value || 0).toFixed(1);
+      }
+
+      function domainMeter(title, score, rationale) {
+        const safeScore = Math.max(0, Math.min(100, Number(score || 0)));
+        return `
+          <article class="card meter-card">
+            <div class="meter-head">
+              <p class="label">${title}</p>
+              <p class="score-pill">${prettyScore(safeScore)}</p>
+            </div>
+            <div class="meter-track">
+              <span class="meter-fill" style="width:${safeScore}%;"></span>
+            </div>
+            <p class="muted">${rationale}</p>
+          </article>
+        `;
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        result.innerHTML = `<section class="card status-card"><p>Analyzing profile and generating dashboard...</p></section>`;
+
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (!data.live_url) delete data.live_url;
+
+        try {
+          const res = await fetch(`${API_BASE}/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const contentType = res.headers.get('content-type') || '';
+          const rawBody = await res.text();
+          let payload;
+
+          if (contentType.includes('application/json')) {
+            try {
+              payload = JSON.parse(rawBody);
+            } catch {
+              throw new Error(`Server claimed JSON but returned invalid content (status ${res.status}). Preview: ${rawBody.slice(0, 120)}`);
+            }
+          } else {
+            throw new Error(`Server returned non-JSON response (status ${res.status}). Start the app with 'python -m uvicorn app.main:app --reload'. Response preview: ${rawBody.slice(0, 120)}`);
+          }
+
+          if (!res.ok) {
+            const detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail || payload);
+            result.innerHTML = `<article class="card error-card">Analysis failed (${res.status}): ${detail}</article>`;
+            return;
+          }
+
+          const json = payload;
+          const domain = json.skill_audit;
+          const domainCards = [
+            domainMeter('Code Quality', domain.code_quality.value, domain.code_quality.rationale),
+            domainMeter('Architecture', domain.architecture.value, domain.architecture.rationale),
+            domainMeter('Testing', domain.testing.value, domain.testing.rationale),
+            domainMeter('Security', domain.security.value, domain.security.rationale),
+            domainMeter('Documentation', domain.documentation.value, domain.documentation.rationale),
+            domainMeter('Delivery', domain.delivery.value, domain.delivery.rationale),
+          ].join('');
+
+          const evidenceRows = (json.evidence || [])
+            .slice(0, 12)
+            .map((e) => `<tr><td>${e.repository}</td><td>${e.finding}</td><td>${e.impact}</td></tr>`)
+            .join('');
+
+          const roadmapRows = (json.roadmap_90_days || [])
+            .map((w) => `<tr><td>Week ${w.week}</td><td>${w.objective}</td><td>${w.deliverable}</td><td>${w.success_check}</td></tr>`)
+            .join('');
+
+          result.innerHTML = `
+            <section class="dashboard-grid">
+              ${scoreCard('Developer', json.profile.username, `${json.profile.public_repos} public repos`)}
+              ${scoreCard('Overall Score', prettyScore(json.skill_audit.overall), `Claimed: ${data.claimed_level}`)}
+              ${scoreCard('Demonstrated Level', json.skill_audit.demonstrated_level, `Peer percentile: ${json.percentile}th`)}
+            </section>
+
+            <section class="card highlight-card">
+              <h2>Claim vs Evidence</h2>
+              <p>${json.claim_gap}</p>
+            </section>
+
+            <section class="grid-3">${domainCards}</section>
+
+            <section class="card info-card">
+              <h3>Best-Fit Roles</h3>
+              ${list(json.job_fits.map((j) => `<strong>${j.role}</strong> - ${j.company_type} (${j.location}) : ${j.match_score}%<br><span class='muted'>${j.why}</span>`))}
+            </section>
+
+            <section class="card info-card">
+              <h3>Skill Gaps to Next Salary Bracket</h3>
+              ${list(json.next_salary_bracket_gap.map((g) => `<strong>${g.skill}</strong>: ${g.action}<br><span class='muted'>${g.why_it_matters}</span>`))}
+            </section>
+
+            <section class="card evidence-card">
+              <h3>Evidence from Repositories</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Repository</th><th>Finding</th><th>Impact</th></tr></thead>
+                  <tbody>${evidenceRows || '<tr><td colspan="3">No negative findings detected.</td></tr>'}</tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card live-card">
+              <h3>Live App Audit</h3>
+              <p><strong>URL:</strong> ${json.live_audit.url || 'Not provided'}</p>
+              <p><strong>Response Time:</strong> ${json.live_audit.response_time_ms ? `${json.live_audit.response_time_ms} ms` : 'N/A'}</p>
+              ${list(json.live_audit.notes || [])}
+            </section>
+
+            <section class="card roadmap-card">
+              <h3>90-Day Roadmap</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Week</th><th>Objective</th><th>Deliverable</th><th>Success Check</th></tr></thead>
+                  <tbody>${roadmapRows}</tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card resume-card">
+              <h3>Resume Bullets</h3>
+              ${list(json.resume_rewrites)}
+            </section>
+          `;
+        } catch (err) {
+          result.innerHTML = `<article class="card error-card">${err.message || err}</article>`;
+        }
+      });
+    </script>
+  </body>
+</html>
