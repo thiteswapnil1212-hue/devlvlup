@@ -21,6 +21,20 @@ Evidence-first developer career audit tool.
   - 90-day roadmap
   - evidence-based resume bullets
 
+## Architecture
+
+```mermaid
+flowchart LR
+    User([User]) --> FE["Frontend<br/>templates + static"]
+    FE --> API["FastAPI backend<br/>POST /api/analyze"]
+    API --> GH["GitHub API<br/>public repos"]
+    API --> Live["Live URL audit<br/>UX · accessibility"]
+    API --> Score["Scoring engines<br/>quality · architecture · testing<br/>security · docs · delivery"]
+    Score --> Out["Outputs<br/>level gap · role fit · percentile<br/>salary gaps · 90-day roadmap · resume bullets"]
+    API --> DB["SQLite<br/>local results"]
+    Node["Node.js server<br/>GET /analyze/:username"] --> GH
+```
+
 ## Run locally
 
 ```bash
